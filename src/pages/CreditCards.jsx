@@ -6,6 +6,8 @@ import { useCreditCards } from '@/hooks/useCreditCards';
 import { useCardExpenses } from '@/hooks/useCardExpenses';
 import CreditCardForm from '@/components/creditCards/CreditCardForm';
 import CardExpenseForm from '@/components/cardExpenses/CardExpenseForm';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/AuthContext';
 import moment from 'moment';
 
 export default function CreditCards() {
@@ -13,18 +15,58 @@ export default function CreditCards() {
   const [showCardForm, setShowCardForm] = useState(false);
   const [showExpenseForm, setShowExpenseForm] = useState(false);
   const [editingCard, setEditingCard] = useState(null);
-  const currentMonth = moment().format('YYYY-MM');
+  const [allCardsTotals, setAllCardsTotals] = useState({});
+  const [loadingTotals, setLoadingTotals] = useState(false);
   
+  const currentMonth = moment().format('YYYY-MM');
+  const { user } = useAuth();
   const { cards, loading: cardsLoading, addCreditCard, updateCreditCard, deleteCreditCard } = useCreditCards();
   
-  // Buscar despesas do cartão selecionado
+  // Hook para despesas do cartão selecionado (chamado no topo do componente)
   const { 
-    expenses: cardExpenses, 
+    expenses: selectedCardExpenses, 
     loading: expensesLoading, 
-    totalExpenses,
+    totalExpenses: selectedCardTotal,
     addCardExpense,
     deleteCardExpense 
   } = useCardExpenses(selectedCardId, currentMonth);
+
+  // 🔹 Buscar os totais de TODOS os cartões (sem usar hooks dentro de loops)
+  useEffect(() => {
+    const fetchAllCardsTotals = async () => {
+      if (!user || cards.length === 0) return;
+      
+      setLoadingTotals(true);
+      try {
+        const startDate = moment(currentMonth, 'YYYY-MM').startOf('month').format('YYYY-MM-DD');
+        const endDate = moment(currentMonth, 'YYYY-MM').endOf('month').format('YYYY-MM-DD');
+        
+        const { data, error } = await supabase
+          .from('card_expenses')
+          .select('card_id, amount')
+          .eq('user_id', user.id)
+          .gte('month', startDate)
+          .lte('month', endDate);
+        
+        if (error) throw error;
+        
+        // Agrupar totais por card_id
+        const totals = {};
+        data?.forEach(expense => {
+          const cardId = expense.card_id;
+          totals[cardId] = (totals[cardId] || 0) + Number(expense.amount);
+        });
+        
+        setAllCardsTotals(totals);
+      } catch (error) {
+        console.error('Erro ao buscar totais dos cartões:', error);
+      } finally {
+        setLoadingTotals(false);
+      }
+    };
+    
+    fetchAllCardsTotals();
+  }, [user, cards, currentMonth]); // Executa quando usuário, cartões ou mês mudar
 
   // Selecionar o primeiro cartão automaticamente
   useEffect(() => {
@@ -39,10 +81,7 @@ export default function CreditCards() {
     const result = await addCreditCard(cardData);
     if (!result.error) {
       setShowCardForm(false);
-      // Selecionar o novo cartão automaticamente
-      if (result.data) {
-        setSelectedCardId(result.data.id);
-      }
+      if (result.data) setSelectedCardId(result.data.id);
     } else {
       alert('Erro ao adicionar cartão: ' + (result.error.message || result.error));
     }
@@ -59,11 +98,10 @@ export default function CreditCards() {
   };
 
   const handleDeleteCard = async (id) => {
-    if (confirm('Tem certeza que deseja excluir este cartão? Todas as despesas vinculadas também serão removidas.')) {
+    if (confirm('Tem certeza que deseja excluir este cartão? As despesas vinculadas também serão removidas.')) {
       const result = await deleteCreditCard(id);
       if (!result.error) {
         if (selectedCardId === id) {
-          // Selecionar outro cartão se houver
           const remainingCards = cards.filter(c => c.id !== id);
           setSelectedCardId(remainingCards[0]?.id || null);
         }
@@ -75,20 +113,32 @@ export default function CreditCards() {
 
   const handleAddExpense = async (expenseData) => {
     const result = await addCardExpense(expenseData);
-    if (!result.error) {
+    if (!result.error && result.data) {
       setShowExpenseForm(false);
-    } else {
+      // Atualizar o total do cartão localmente após adicionar
+      setAllCardsTotals(prev => ({
+        ...prev,
+        [expenseData.card_id]: (prev[expenseData.card_id] || 0) + expenseData.amount
+      }));
+    } else if (result.error) {
       alert('Erro ao adicionar despesa: ' + (result.error.message || result.error));
     }
   };
 
-  const handleDeleteExpense = async (id) => {
+  const handleDeleteExpense = async (id, cardId, amount) => {
     if (confirm('Tem certeza que deseja excluir esta despesa?')) {
-      await deleteCardExpense(id);
+      const result = await deleteCardExpense(id);
+      if (!result.error) {
+        // Atualizar o total do cartão localmente após deletar
+        setAllCardsTotals(prev => ({
+          ...prev,
+          [cardId]: Math.max(0, (prev[cardId] || 0) - amount)
+        }));
+      }
     }
   };
 
-  if (cardsLoading) {
+  if (cardsLoading || loadingTotals) {
     return (
       <div className="flex justify-center py-20">
         <div className="w-8 h-8 border-4 border-muted border-t-primary rounded-full animate-spin" />
@@ -111,10 +161,10 @@ export default function CreditCards() {
 
       {/* Grid de Cartões */}
       {cards.length === 0 ? (
-        <div className="text-center py-12 bg-gray-50 rounded-2xl border">
-          <CreditCard className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-          <p className="text-gray-500 mb-2">Nenhum cartão cadastrado</p>
-          <p className="text-sm text-gray-400 mb-4">Clique em "Novo Cartão" para começar</p>
+        <div className="text-center py-12 bg-gray-800/50 rounded-2xl border border-gray-700">
+          <CreditCard className="w-12 h-12 text-gray-500 mx-auto mb-3" />
+          <p className="text-gray-400 mb-2">Nenhum cartão cadastrado</p>
+          <p className="text-sm text-gray-500 mb-4">Clique em "Novo Cartão" para começar</p>
           <Button onClick={() => setShowCardForm(true)} variant="outline">
             <Plus className="w-4 h-4 mr-2" /> Criar primeiro cartão
           </Button>
@@ -122,13 +172,12 @@ export default function CreditCards() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {cards.map((card) => {
-            const cardTotal = selectedCardId === card.id ? totalExpenses : 0;
-            
+            const cardTotal = allCardsTotals[card.id] || 0;
             return (
               <div
                 key={card.id}
                 className={`bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white cursor-pointer transition-all ${
-                  selectedCardId === card.id ? 'ring-2 ring-green-500 shadow-lg' : 'hover:ring-2 hover:ring-gray-500'
+                  selectedCardId === card.id ? 'ring-2 ring-green-500 shadow-lg' : 'hover:ring-2 hover:ring-gray-600'
                 }`}
                 onClick={() => setSelectedCardId(card.id)}
               >
@@ -187,12 +236,12 @@ export default function CreditCards() {
 
       {/* Detalhe da Fatura do Cartão Selecionado */}
       {selectedCard && (
-        <div className="bg-white border rounded-2xl p-6">
+        <div className="bg-gray-800/50 border border-gray-700 rounded-2xl p-6">
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-xl font-bold">Fatura - {selectedCard.name}</h2>
-              <p className="text-sm text-muted-foreground">
-                Total: R$ {totalExpenses.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} • 
+              <p className="text-sm text-gray-400">
+                Total: R$ {selectedCardTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} • 
                 Vence dia {selectedCard.due_day || 10}
               </p>
             </div>
@@ -205,20 +254,20 @@ export default function CreditCards() {
             <div className="flex justify-center py-10">
               <div className="w-6 h-6 border-3 border-muted border-t-primary rounded-full animate-spin" />
             </div>
-          ) : cardExpenses.length === 0 ? (
-            <div className="text-center py-10 text-muted-foreground">
+          ) : selectedCardExpenses.length === 0 ? (
+            <div className="text-center py-10 text-gray-400">
               Nenhuma compra registrada neste cartão
             </div>
           ) : (
             <div className="space-y-3">
-              {cardExpenses.map((expense) => (
+              {selectedCardExpenses.map((expense) => (
                 <div
                   key={expense.id}
-                  className="flex justify-between items-center p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                  className="flex justify-between items-center p-3 bg-gray-900/50 rounded-lg hover:bg-gray-900 transition-colors"
                 >
                   <div>
                     <p className="font-medium">{expense.description}</p>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs text-gray-400">
                       {moment(expense.month).format('DD/MM')} • {expense.category || 'Sem categoria'}
                       {expense.installments > 1 && ` • ${expense.current_installment}/${expense.installments}`}
                     </p>
@@ -228,8 +277,8 @@ export default function CreditCards() {
                       R$ {expense.amount?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </p>
                     <button
-                      onClick={() => handleDeleteExpense(expense.id)}
-                      className="text-red-500 hover:text-red-700 text-sm"
+                      onClick={() => handleDeleteExpense(expense.id, expense.card_id, expense.amount)}
+                      className="text-red-500 hover:text-red-400 text-sm"
                     >
                       ✕
                     </button>
@@ -241,7 +290,7 @@ export default function CreditCards() {
         </div>
       )}
 
-      {/* Formulário de Cartão */}
+      {/* Formulários */}
       <CreditCardForm
         open={showCardForm}
         onClose={() => {
@@ -252,7 +301,6 @@ export default function CreditCards() {
         editingCard={editingCard}
       />
 
-      {/* Formulário de Despesa */}
       <CardExpenseForm
         open={showExpenseForm}
         onClose={() => setShowExpenseForm(false)}

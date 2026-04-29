@@ -1,3 +1,4 @@
+// src/lib/AuthContext.jsx
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
@@ -17,21 +18,36 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
 
   useEffect(() => {
-    // Verificar sessão atual
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Primeiro, verificar sessão atual
+    const initializeAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          console.error('Erro ao obter sessão:', error);
+        }
+        setSession(session);
+        setUser(session?.user ?? null);
+      } catch (error) {
+        console.error('Erro ao inicializar auth:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
 
-    // Escutar mudanças na autenticação
+    initializeAuth();
+
+    // Segundo, escutar mudanças na autenticação
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      console.log('Auth state changed:', _event, session?.user?.email);
       setSession(session);
       setUser(session?.user ?? null);
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Cleanup
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const signUp = async (email, password, fullName) => {
@@ -57,6 +73,10 @@ export const AuthProvider = ({ children }) => {
 
   const signOut = async () => {
     const { error } = await supabase.auth.signOut();
+    if (!error) {
+      setUser(null);
+      setSession(null);
+    }
     return { error };
   };
 
@@ -67,6 +87,7 @@ export const AuthProvider = ({ children }) => {
     signUp,
     signIn,
     signOut,
+    isAuthenticated: !!user,
   };
 
   return (

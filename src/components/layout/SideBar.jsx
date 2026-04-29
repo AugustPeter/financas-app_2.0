@@ -7,12 +7,9 @@ import {
   TrendingUp, 
   CreditCard,
   ChevronLeft,
-  Moon,
-  Sun,
   LogOut
 } from "lucide-react";
 import { useState } from "react";
-import { useTheme } from "@/lib/ThemeContext";
 import { useAuth } from "@/lib/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -26,7 +23,6 @@ const menuItems = [
 
 export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const { isDark, toggleTheme } = useTheme();
   const { signOut } = useAuth();
   const navigate = useNavigate();
 
@@ -43,7 +39,6 @@ export default function Sidebar() {
       ${isCollapsed ? 'w-20' : 'w-64'}
       min-h-screen sticky top-0
     `}>
-      {/* Logo */}
       <div className={`
         flex items-center h-16 px-4 border-b border-sidebar-border
         ${isCollapsed ? 'justify-center' : 'justify-between'}
@@ -69,7 +64,6 @@ export default function Sidebar() {
         </button>
       </div>
 
-      {/* Menu */}
       <nav className="flex-1 py-6 px-3 space-y-1">
         {menuItems.map((item) => {
           const Icon = item.icon;
@@ -95,31 +89,6 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* Dark Mode Toggle */}
-      <div className="px-3 mb-2">
-        <button
-          onClick={toggleTheme}
-          className={`
-            flex items-center gap-3 px-3 py-2.5 rounded-lg
-            hover:bg-sidebar-accent hover:text-sidebar-accent-foreground
-            transition-all w-full
-            ${isCollapsed ? 'justify-center' : ''}
-          `}
-          title={isCollapsed ? (isDark ? 'Modo Claro' : 'Modo Escuro') : ''}
-        >
-          {isDark ? (
-            <Sun className="w-5 h-5 shrink-0" />
-          ) : (
-            <Moon className="w-5 h-5 shrink-0" />
-          )}
-          {!isCollapsed && (
-            <span className="text-sm font-medium">
-              {isDark ? 'Modo Claro' : 'Modo Escuro'}
-            </span>
-          )}
-        </button>
-      </div>
-
       {/* Botão Sair */}
       <div className="px-3 mb-4">
         <button
@@ -130,16 +99,12 @@ export default function Sidebar() {
             transition-all w-full
             ${isCollapsed ? 'justify-center' : ''}
           `}
-          title={isCollapsed ? 'Sair' : ''}
         >
           <LogOut className="w-5 h-5 shrink-0" />
-          {!isCollapsed && (
-            <span className="text-sm font-medium">Sair</span>
-          )}
+          {!isCollapsed && <span className="text-sm font-medium">Sair</span>}
         </button>
       </div>
 
-      {/* Footer */}
       <div className="p-4 border-t border-sidebar-border">
         {!isCollapsed ? (
           <div className="text-xs text-sidebar-foreground/60 text-center">

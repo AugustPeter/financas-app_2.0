@@ -4,7 +4,6 @@ import { Toaster } from "@/components/ui/toaster"
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { AuthProvider } from '@/lib/AuthContext'
-import { ThemeProvider } from '@/lib/ThemeContext'
 import AppLayout from '@/components/layout/AppLayout';
 import Dashboard from '@/pages/Dashboard';
 import Transactions from '@/pages/Transactions';
@@ -35,10 +34,8 @@ function App() {
     <QueryClientProvider client={queryClientInstance}>
       <Router>
         <AuthProvider>
-          <ThemeProvider>
-            <AppRoutes />
-            <Toaster />
-          </ThemeProvider>
+          <AppRoutes />
+          <Toaster />
         </AuthProvider>
       </Router>
     </QueryClientProvider>

@@ -2,8 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/lib/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { Moon, Sun, UserPlus, LogIn } from 'lucide-react';
-import { useTheme } from '@/lib/ThemeContext';
+import { UserPlus, LogIn } from 'lucide-react';
 
 export default function Login() {
   const [isLogin, setIsLogin] = useState(true);
@@ -13,10 +12,8 @@ export default function Login() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signIn, signUp, user } = useAuth();
-  const { isDark, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
-  // Se já estiver logado, redireciona para o dashboard
   useEffect(() => {
     if (user) {
       navigate('/');
@@ -42,20 +39,17 @@ export default function Login() {
     
     if (result.error) {
       setError(result.error.message);
+      setLoading(false);
+    } else {
+      if (!isLogin && result.data?.user) {
+        await signIn(email, password);
+      }
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      {/* Botão de tema */}
-      <button
-        onClick={toggleTheme}
-        className="fixed top-4 right-4 p-2 rounded-lg bg-card border border-border hover:bg-muted transition-colors"
-      >
-        {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-      </button>
-
       <div className="max-w-md w-full space-y-8 p-8 bg-card border border-border rounded-2xl shadow-lg">
         <div className="text-center">
           <div className="w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -69,8 +63,8 @@ export default function Login() {
         
         <form onSubmit={handleSubmit} className="space-y-6">
           {error && (
-            <div className="bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800 rounded-lg p-3">
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="bg-red-950/30 border border-red-800 rounded-lg p-3">
+              <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
           
@@ -137,7 +131,6 @@ export default function Login() {
           </button>
         </form>
 
-        {/* Botão para alternar entre login e cadastro */}
         <div className="text-center">
           <button
             onClick={() => {
