@@ -1,4 +1,3 @@
-// src/components/layout/Sidebar.jsx
 import { NavLink } from "react-router-dom";
 import { 
   LayoutDashboard, 
