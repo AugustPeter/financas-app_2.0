@@ -19,12 +19,10 @@ export default function Dashboard() {
   const { totalExpenses: totalCards, loading: cardLoading } = useCardExpenses(null, currentMonth);
   const { totalInvestedInMonth, loading: investLoading } = useInvestments(currentMonth);
   
-  // Saldo acumulado até o mês anterior
+  // Saldo acumulado até o mês anterior (o que veio de meses anteriores)
   const { cumulativeBalance: prevMonthBalance, loading: prevBalanceLoading } = useCumulativeBalance(prevMonth);
-  // Saldo acumulado até o mês atual
-  const { cumulativeBalance: currentMonthBalance, loading: currentBalanceLoading } = useCumulativeBalance(currentMonth);
 
-  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || prevBalanceLoading || currentBalanceLoading;
+  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || prevBalanceLoading;
 
   // Cálculos do mês atual
   const totalIncome = currentTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
@@ -34,7 +32,10 @@ export default function Dashboard() {
   const totalInvested = totalInvestedInMonth || 0;
 
   const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested;
-  const currentMonthBalanceChange = totalIncome - totalSpent;
+  const currentMonthBalance = totalIncome - totalSpent;
+  
+  // 🔥 CORREÇÃO: Saldo Total = Saldo que veio de meses anteriores + Saldo do mês atual
+  const totalBalance = prevMonthBalance + currentMonthBalance;
 
   if (isLoading) {
     return (
@@ -77,12 +78,12 @@ export default function Dashboard() {
         />
         <StatCard 
           label="Saldo do Mês" 
-          value={currentMonthBalanceChange} 
+          value={currentMonthBalance} 
           icon={Wallet} 
-          variant={currentMonthBalanceChange >= 0 ? "balance" : "expense"}
+          variant={currentMonthBalance >= 0 ? "balance" : "expense"}
         />
         <StatCard 
-          label="Saldo Mês Anterior" 
+          label="Saldo Anterior" 
           value={prevMonthBalance} 
           icon={History} 
           variant={prevMonthBalance >= 0 ? "balance" : "default"}
@@ -106,24 +107,27 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Saldo do Mês</p>
-            <p className={`text-lg font-bold ${currentMonthBalanceChange >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {currentMonthBalanceChange >= 0 ? '+' : ''}R$ {currentMonthBalanceChange.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <p className={`text-lg font-bold ${currentMonthBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+              {currentMonthBalance >= 0 ? '+' : ''}R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Saldo Anterior</p>
-            <p className={`text-lg font-bold ${prevMonthBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
+            <p className="text-lg font-bold text-blue-600">
               R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Saldo Total</p>
-            <p className={`text-lg font-bold ${currentMonthBalance >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
-              R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+              R$ {totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
         </div>
       </div>
+
+      
+      
     </div>
   );
 }

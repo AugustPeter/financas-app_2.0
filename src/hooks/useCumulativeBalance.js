@@ -6,6 +6,7 @@ import moment from 'moment'
 
 export function useCumulativeBalance(month) {
   const [cumulativeBalance, setCumulativeBalance] = useState(0)
+  const [monthlyBalance, setMonthlyBalance] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const { user } = useAuth()
@@ -16,7 +17,7 @@ export function useCumulativeBalance(month) {
       return
     }
 
-    const fetchCumulativeBalance = async () => {
+    const fetchBalances = async () => {
       try {
         setLoading(true)
         setError(null)
@@ -26,17 +27,19 @@ export function useCumulativeBalance(month) {
         
         const { data, error: queryError } = await supabase
           .from('transactions')
-          .select('type, amount')
+          .select('type, amount, date')
           .eq('user_id', user.id)
           .lte('date', endDate)
+          .order('date', { ascending: true })
 
         if (queryError) {
-          console.error('Erro ao buscar saldo acumulado:', queryError)
+          console.error('Erro ao buscar saldo:', queryError)
           setError(queryError.message)
           setCumulativeBalance(0)
+          setMonthlyBalance(0)
         } else {
-          // Calcular saldo acumulado
-          const balance = (data || []).reduce((sum, t) => {
+          // Calcular saldo acumulado total
+          const totalBalance = (data || []).reduce((sum, t) => {
             if (t.type === 'income') {
               return sum + Number(t.amount)
             } else {
@@ -44,19 +47,43 @@ export function useCumulativeBalance(month) {
             }
           }, 0)
           
-          setCumulativeBalance(balance)
+          setCumulativeBalance(totalBalance)
+          
+          // Calcular apenas o saldo do mês específico (para o card "Saldo do Mês")
+          const monthStart = moment(month, 'YYYY-MM').startOf('month').format('YYYY-MM-DD')
+          const monthEnd = moment(month, 'YYYY-MM').endOf('month').format('YYYY-MM-DD')
+          
+          const monthTransactions = (data || []).filter(t => 
+            t.date >= monthStart && t.date <= monthEnd
+          )
+          
+          const monthBalanceCalc = monthTransactions.reduce((sum, t) => {
+            if (t.type === 'income') {
+              return sum + Number(t.amount)
+            } else {
+              return sum - Number(t.amount)
+            }
+          }, 0)
+          
+          setMonthlyBalance(monthBalanceCalc)
         }
       } catch (err) {
         console.error('Erro inesperado:', err)
         setError(err.message)
         setCumulativeBalance(0)
+        setMonthlyBalance(0)
       } finally {
         setLoading(false)
       }
     }
 
-    fetchCumulativeBalance()
+    fetchBalances()
   }, [user, month])
 
-  return { cumulativeBalance, loading, error }
+  return { 
+    cumulativeBalance,  // Saldo acumulado até o final do mês
+    monthlyBalance,     // Apenas o saldo do mês (receitas - despesas do mês)
+    loading, 
+    error 
+  }
 }
