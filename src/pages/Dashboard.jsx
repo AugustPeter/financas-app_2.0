@@ -6,6 +6,7 @@ import { useFixedExpenses } from "@/hooks/useFixedExpenses";
 import { useCardExpenses } from "@/hooks/useCardExpenses";
 import { useInvestments } from "@/hooks/useInvestments";
 import { useCumulativeBalance } from "@/hooks/useCumulativeBalance";
+import { useMonthlyBalance } from "@/hooks/useMonthlyBalance";
 import { TrendingUp, TrendingDown, Wallet, History } from "lucide-react";
 import MonthSelector from "@/components/shared/MonthSelector";
 import StatCard from "@/components/shared/StatCard";
@@ -19,10 +20,13 @@ export default function Dashboard() {
   const { totalExpenses: totalCards, loading: cardLoading } = useCardExpenses(null, currentMonth);
   const { totalInvestedInMonth, loading: investLoading } = useInvestments(currentMonth);
   
-  // Saldo acumulado até o mês anterior (o que veio de meses anteriores)
-  const { cumulativeBalance: prevMonthBalance, loading: prevBalanceLoading } = useCumulativeBalance(prevMonth);
+  // 🔥 Saldo APENAS do mês anterior (o que ficou em conta naquele mês)
+  const { balance: prevMonthBalance, loading: prevBalanceLoading } = useMonthlyBalance(prevMonth);
+  
+  // 🔥 Saldo acumulado total até o mês atual
+  const { cumulativeBalance: currentTotalBalance, loading: currentBalanceLoading } = useCumulativeBalance(currentMonth);
 
-  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || prevBalanceLoading;
+  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || prevBalanceLoading || currentBalanceLoading;
 
   // Cálculos do mês atual
   const totalIncome = currentTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
@@ -33,9 +37,6 @@ export default function Dashboard() {
 
   const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested;
   const currentMonthBalance = totalIncome - totalSpent;
-  
-  // 🔥 CORREÇÃO: Saldo Total = Saldo que veio de meses anteriores + Saldo do mês atual
-  const totalBalance = prevMonthBalance + currentMonthBalance;
 
   if (isLoading) {
     return (
@@ -83,16 +84,17 @@ export default function Dashboard() {
           variant={currentMonthBalance >= 0 ? "balance" : "expense"}
         />
         <StatCard 
-          label="Saldo Anterior" 
+          label="Saldo Mês Anterior" 
           value={prevMonthBalance} 
           icon={History} 
           variant={prevMonthBalance >= 0 ? "balance" : "default"}
+          subtitle={`Resultado líquido de ${moment(prevMonth, "YYYY-MM").format("MMMM/YYYY")}`}
         />
       </div>
 
       {/* Resumo Rápido */}
       <div className="bg-card border border-border rounded-2xl p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 text-center">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
           <div>
             <p className="text-xs text-muted-foreground">Renda do Mês</p>
             <p className="text-lg font-bold text-green-600">
@@ -113,21 +115,12 @@ export default function Dashboard() {
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Saldo Anterior</p>
-            <p className="text-lg font-bold text-blue-600">
+            <p className={`text-lg font-bold ${prevMonthBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
               R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Saldo Total</p>
-            <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
-              R$ {totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </p>
           </div>
         </div>
       </div>
-
-      
-      
     </div>
   );
 }
