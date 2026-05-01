@@ -5,7 +5,7 @@ import { useTransactions } from "@/hooks/useTransactions";
 import { useFixedExpenses } from "@/hooks/useFixedExpenses";
 import { useCardExpenses } from "@/hooks/useCardExpenses";
 import { useInvestments } from "@/hooks/useInvestments";
-import { TrendingUp, TrendingDown, Wallet, History } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, TrendingUp as TrendingUpIcon } from "lucide-react";
 import MonthSelector from "@/components/shared/MonthSelector";
 import StatCard from "@/components/shared/StatCard";
 
@@ -19,7 +19,7 @@ export default function Dashboard() {
   const { totalExpenses: totalCards, loading: cardLoading } = useCardExpenses(null, currentMonth);
   const { totalInvestedInMonth, loading: investLoading } = useInvestments(currentMonth);
   
-  // 🔥 Dados do mês anterior (para calcular o saldo anterior)
+  // Dados do mês anterior
   const { transactions: prevTransactions, loading: prevTransLoading } = useTransactions(prevMonth);
   const { totalActiveFixed: prevTotalFixed, loading: prevFixedLoading } = useFixedExpenses();
   const { totalExpenses: prevTotalCards, loading: prevCardLoading } = useCardExpenses(null, prevMonth);
@@ -37,14 +37,17 @@ export default function Dashboard() {
   const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested;
   const currentMonthBalance = totalIncome - totalSpent;
 
-  // 🔥 Cálculos do mês anterior (SALDO DO MÊS PASSADO)
+  // Cálculos do mês anterior (Saldo Anterior)
   const prevIncome = prevTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
   const prevExpenses = prevTransactions?.filter(t => t.type === "expense")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
   const prevFixed = prevTotalFixed || 0;
   const prevCard = prevTotalCards || 0;
   const prevInvested = prevTotalInvested || 0;
   const prevTotalSpent = prevExpenses + prevFixed + prevCard + prevInvested;
-  const prevMonthBalance = prevIncome - prevTotalSpent;  // ← Este é o SALDO DO MÊS PASSADO
+  const prevMonthBalance = prevIncome - prevTotalSpent;
+
+  // 🔥 Saldo Total = Saldo do Mês + Saldo Anterior
+  const totalBalance = currentMonthBalance + prevMonthBalance;
 
   if (isLoading) {
     return (
@@ -92,11 +95,11 @@ export default function Dashboard() {
           variant={currentMonthBalance >= 0 ? "balance" : "expense"}
         />
         <StatCard 
-          label="Saldo Mês Anterior" 
-          value={prevMonthBalance} 
-          icon={History} 
-          variant={prevMonthBalance >= 0 ? "balance" : "expense"}
-          subtitle={`Saldo de ${moment(prevMonth, "YYYY-MM").format("MMMM/YYYY")}`}
+          label="Saldo Total" 
+          value={totalBalance} 
+          icon={TrendingUpIcon} 
+          variant={totalBalance >= 0 ? "balance" : "expense"}
+          subtitle={`Saldo do Mês + Saldo Anterior`}
         />
       </div>
 
@@ -122,9 +125,12 @@ export default function Dashboard() {
             </p>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Saldo Anterior</p>
-            <p className={`text-lg font-bold ${prevMonthBalance >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-              R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <p className="text-xs text-muted-foreground">Saldo Total</p>
+            <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+              R$ {totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">
+              (Saldo Mês: R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Anterior: R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
             </p>
           </div>
         </div>
