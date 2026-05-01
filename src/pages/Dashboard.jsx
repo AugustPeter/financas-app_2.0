@@ -5,8 +5,6 @@ import { useTransactions } from "@/hooks/useTransactions";
 import { useFixedExpenses } from "@/hooks/useFixedExpenses";
 import { useCardExpenses } from "@/hooks/useCardExpenses";
 import { useInvestments } from "@/hooks/useInvestments";
-import { useCumulativeBalance } from "@/hooks/useCumulativeBalance";
-import { useMonthlyBalance } from "@/hooks/useMonthlyBalance";
 import { TrendingUp, TrendingDown, Wallet, History } from "lucide-react";
 import MonthSelector from "@/components/shared/MonthSelector";
 import StatCard from "@/components/shared/StatCard";
@@ -15,18 +13,20 @@ export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(moment().format("YYYY-MM"));
   const prevMonth = moment(currentMonth, "YYYY-MM").subtract(1, "month").format("YYYY-MM");
 
+  // Dados do mês atual
   const { transactions: currentTransactions, loading: transLoading } = useTransactions(currentMonth);
   const { totalActiveFixed, loading: fixedLoading } = useFixedExpenses();
   const { totalExpenses: totalCards, loading: cardLoading } = useCardExpenses(null, currentMonth);
   const { totalInvestedInMonth, loading: investLoading } = useInvestments(currentMonth);
   
-  // 🔥 Saldo APENAS do mês anterior (o que ficou em conta naquele mês)
-  const { balance: prevMonthBalance, loading: prevBalanceLoading } = useMonthlyBalance(prevMonth);
-  
-  // 🔥 Saldo acumulado total até o mês atual
-  const { cumulativeBalance: currentTotalBalance, loading: currentBalanceLoading } = useCumulativeBalance(currentMonth);
+  // 🔥 Dados do mês anterior (para calcular o saldo anterior)
+  const { transactions: prevTransactions, loading: prevTransLoading } = useTransactions(prevMonth);
+  const { totalActiveFixed: prevTotalFixed, loading: prevFixedLoading } = useFixedExpenses();
+  const { totalExpenses: prevTotalCards, loading: prevCardLoading } = useCardExpenses(null, prevMonth);
+  const { totalInvestedInMonth: prevTotalInvested, loading: prevInvestLoading } = useInvestments(prevMonth);
 
-  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || prevBalanceLoading || currentBalanceLoading;
+  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || 
+                    prevTransLoading || prevFixedLoading || prevCardLoading || prevInvestLoading;
 
   // Cálculos do mês atual
   const totalIncome = currentTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
@@ -34,9 +34,17 @@ export default function Dashboard() {
   const totalFixed = totalActiveFixed || 0;
   const totalCard = totalCards || 0;
   const totalInvested = totalInvestedInMonth || 0;
-
   const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested;
   const currentMonthBalance = totalIncome - totalSpent;
+
+  // 🔥 Cálculos do mês anterior (SALDO DO MÊS PASSADO)
+  const prevIncome = prevTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
+  const prevExpenses = prevTransactions?.filter(t => t.type === "expense")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
+  const prevFixed = prevTotalFixed || 0;
+  const prevCard = prevTotalCards || 0;
+  const prevInvested = prevTotalInvested || 0;
+  const prevTotalSpent = prevExpenses + prevFixed + prevCard + prevInvested;
+  const prevMonthBalance = prevIncome - prevTotalSpent;  // ← Este é o SALDO DO MÊS PASSADO
 
   if (isLoading) {
     return (
@@ -87,8 +95,8 @@ export default function Dashboard() {
           label="Saldo Mês Anterior" 
           value={prevMonthBalance} 
           icon={History} 
-          variant={prevMonthBalance >= 0 ? "balance" : "default"}
-          subtitle={`Resultado líquido de ${moment(prevMonth, "YYYY-MM").format("MMMM/YYYY")}`}
+          variant={prevMonthBalance >= 0 ? "balance" : "expense"}
+          subtitle={`Saldo de ${moment(prevMonth, "YYYY-MM").format("MMMM/YYYY")}`}
         />
       </div>
 
