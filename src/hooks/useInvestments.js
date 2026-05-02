@@ -3,8 +3,12 @@ import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/AuthContext'
 import moment from 'moment'
+import { calculateCurrentValue, calculateTotalReturn, calculateAverageMonthlyReturn } from '@/utils/investmentCalculator'
 
-export function useInvestments(month) {
+// Taxa padrão de 1% ao mês
+const DEFAULT_MONTHLY_RATE = 1;
+
+export function useInvestments(month = null) {
   const [investments, setInvestments] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -27,11 +31,9 @@ export function useInvestments(month) {
           .eq('user_id', user.id)
           .order('purchase_date', { ascending: false })
 
-        // Se tiver mês, filtrar investimentos feitos naquele mês
         if (month) {
           const startDate = moment(month, 'YYYY-MM').startOf('month').format('YYYY-MM-DD')
           const endDate = moment(month, 'YYYY-MM').endOf('month').format('YYYY-MM-DD')
-          
           query = query
             .gte('purchase_date', startDate)
             .lte('purchase_date', endDate)
@@ -44,7 +46,37 @@ export function useInvestments(month) {
           setError(queryError.message)
           setInvestments([])
         } else {
-          setInvestments(data || [])
+          // 🔥 Calcular valor atual para TODOS os investimentos baseado na data
+          const investmentsWithCurrentValue = (data || []).map(inv => {
+            const purchaseDate = inv.purchase_date;
+            const investedAmount = Number(inv.amount);
+            
+            // 🔥 Calcular valor atual com 1% ao mês
+            const currentValue = calculateCurrentValue(
+              investedAmount,
+              purchaseDate,
+              new Date(),
+              DEFAULT_MONTHLY_RATE
+            );
+            
+            const totalReturn = calculateTotalReturn(investedAmount, currentValue);
+            const monthlyReturn = calculateAverageMonthlyReturn(
+              investedAmount, 
+              currentValue, 
+              purchaseDate, 
+              new Date()
+            );
+            
+            return {
+              ...inv,
+              current_value: currentValue,
+              total_return: totalReturn,
+              monthly_return: monthlyReturn,
+              calculated_at: new Date().toISOString()
+            };
+          });
+          
+          setInvestments(investmentsWithCurrentValue)
         }
       } catch (err) {
         console.error('Erro inesperado:', err)
@@ -58,31 +90,50 @@ export function useInvestments(month) {
     fetchInvestments()
   }, [user, month])
 
-  // Total investido no mês
-  const totalInvestedInMonth = investments.reduce((sum, inv) => sum + Number(inv.amount), 0)
-
-  // Total atual de todos investimentos
-  const totalCurrentValue = investments.reduce((sum, inv) => sum + Number(inv.current_value || inv.amount), 0)
-  
-  // Total investido em todos os tempos
+  // Total investido (todos os tempos)
   const totalInvestedAllTime = investments.reduce((sum, inv) => sum + Number(inv.amount), 0)
-
-  // Rentabilidade total
+  
+  // 🔥 Valor atual total (calculado automaticamente)
+  const totalCurrentValue = investments.reduce((sum, inv) => sum + Number(inv.current_value), 0)
+  
+  // 🔥 Rentabilidade total
   const totalProfitability = totalInvestedAllTime > 0 
     ? ((totalCurrentValue - totalInvestedAllTime) / totalInvestedAllTime * 100) 
     : 0
 
-  // Função para adicionar investimento
+  // Total investido no mês (para filtro)
+  const totalInvestedInMonth = investments
+    .filter(inv => {
+      if (!month) return true;
+      const invMonth = moment(inv.purchase_date).format('YYYY-MM');
+      return invMonth === month;
+    })
+    .reduce((sum, inv) => sum + Number(inv.amount), 0);
+
   const addInvestment = async (investmentData) => {
     if (!user) return { error: 'Usuário não autenticado' }
     
     try {
+      const purchaseDate = investmentData.purchase_date || moment().format('YYYY-MM-DD');
+      const investedAmount = Number(investmentData.amount);
+      
+      // Calcular valor atual com base na data de hoje
+      const currentValue = calculateCurrentValue(
+        investedAmount,
+        purchaseDate,
+        new Date(),
+        DEFAULT_MONTHLY_RATE
+      );
+      
       const newInvestment = {
-        ...investmentData,
+        name: investmentData.name,
+        type: investmentData.type,
+        amount: investedAmount,
+        current_value: currentValue,
+        purchase_date: purchaseDate,
+        broker: investmentData.broker || null,
+        notes: investmentData.notes || null,
         user_id: user.id,
-        amount: Number(investmentData.amount),
-        current_value: investmentData.current_value ? Number(investmentData.current_value) : Number(investmentData.amount),
-        purchase_date: investmentData.purchase_date || moment().format('YYYY-MM-DD'),
       }
       
       const { data, error } = await supabase
@@ -106,16 +157,12 @@ export function useInvestments(month) {
     }
   }
 
-  // Função para atualizar investimento
   const updateInvestment = async (id, updates) => {
     if (!user) return { error: 'Usuário não autenticado' }
     
     try {
       if (updates.amount) {
-        updates.amount = Number(updates.amount)
-      }
-      if (updates.current_value) {
-        updates.current_value = Number(updates.current_value)
+        updates.amount = Number(updates.amount);
       }
       
       const { data, error } = await supabase
@@ -131,17 +178,28 @@ export function useInvestments(month) {
       }
 
       if (data && data[0]) {
-        setInvestments(prev => prev.map(i => i.id === id ? data[0] : i))
+        // Recalcular valor atual após atualização
+        const updated = data[0];
+        const newCurrentValue = calculateCurrentValue(
+          Number(updated.amount),
+          updated.purchase_date,
+          new Date(),
+          DEFAULT_MONTHLY_RATE
+        );
+        
+        const finalData = { ...updated, current_value: newCurrentValue };
+        
+        setInvestments(prev => prev.map(i => i.id === id ? finalData : i))
+        return { data: finalData, error: null }
       }
       
-      return { data: data?.[0] || null, error: null }
+      return { data: null, error: null }
     } catch (err) {
       console.error('Erro inesperado ao atualizar:', err)
       return { data: null, error: err.message }
     }
   }
 
-  // Função para deletar investimento
   const deleteInvestment = async (id) => {
     if (!user) return { error: 'Usuário não autenticado' }
     
@@ -167,10 +225,9 @@ export function useInvestments(month) {
 
   return { 
     investments,
-    monthlyInvestments: investments, // Investimentos do mês
     totalInvestedInMonth,
-    totalCurrentValue,
     totalInvestedAllTime,
+    totalCurrentValue,
     totalProfitability,
     loading,
     error,

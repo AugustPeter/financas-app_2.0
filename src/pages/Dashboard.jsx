@@ -1,16 +1,19 @@
 // src/pages/Dashboard.jsx
 import { useState } from "react";
+import { lazy, Suspense } from 'react';
 import moment from "moment";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useFixedExpenses } from "@/hooks/useFixedExpenses";
 import { useCardExpenses } from "@/hooks/useCardExpenses";
 import { useInvestments } from "@/hooks/useInvestments";
-import { TrendingUp, TrendingDown, Wallet, TrendingUp as TrendingUpIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, BarChart3, LayoutDashboard } from "lucide-react";
 import MonthSelector from "@/components/shared/MonthSelector";
 import StatCard from "@/components/shared/StatCard";
+import SaldoChart from "@/components/dashboard/SaldoChart";
 
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(moment().format("YYYY-MM"));
+  const [activeTab, setActiveTab] = useState("resumo"); // "resumo" ou "grafico"
   const prevMonth = moment(currentMonth, "YYYY-MM").subtract(1, "month").format("YYYY-MM");
 
   // Dados do mês atual
@@ -37,7 +40,7 @@ export default function Dashboard() {
   const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested;
   const currentMonthBalance = totalIncome - totalSpent;
 
-  // Cálculos do mês anterior (Saldo Anterior)
+  // Cálculos do mês anterior
   const prevIncome = prevTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
   const prevExpenses = prevTransactions?.filter(t => t.type === "expense")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
   const prevFixed = prevTotalFixed || 0;
@@ -46,8 +49,8 @@ export default function Dashboard() {
   const prevTotalSpent = prevExpenses + prevFixed + prevCard + prevInvested;
   const prevMonthBalance = prevIncome - prevTotalSpent;
 
-  // 🔥 Saldo Total = Saldo do Mês + Saldo Anterior
   const totalBalance = currentMonthBalance + prevMonthBalance;
+  const SaldoChart = lazy(() => import('@/components/dashboard/SaldoChart'));
 
   if (isLoading) {
     return (
@@ -97,44 +100,84 @@ export default function Dashboard() {
         <StatCard 
           label="Saldo Total" 
           value={totalBalance} 
-          icon={TrendingUpIcon} 
+          icon={TrendingUp} 
           variant={totalBalance >= 0 ? "balance" : "expense"}
           subtitle={`Saldo do Mês + Saldo Anterior`}
         />
       </div>
 
-      {/* Resumo Rápido */}
-      <div className="bg-card border border-border rounded-2xl p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
-          <div>
-            <p className="text-xs text-muted-foreground">Renda do Mês</p>
-            <p className="text-lg font-bold text-green-600">
-              R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Gastos do Mês</p>
-            <p className="text-lg font-bold text-red-600">
-              R$ {totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Saldo do Mês</p>
-            <p className={`text-lg font-bold ${currentMonthBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {currentMonthBalance >= 0 ? '+' : ''}R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground">Saldo Total</p>
-            <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
-              R$ {totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              (Saldo Mês: R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + Anterior: R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-            </p>
-          </div>
+      {/* 🔥 Guias */}
+      <div className="border-b border-border">
+        <div className="flex gap-4">
+          <button
+            onClick={() => setActiveTab("resumo")}
+            className={`pb-3 px-2 text-sm font-medium transition-colors relative ${
+              activeTab === "resumo" 
+                ? "text-primary border-b-2 border-primary" 
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <LayoutDashboard className="w-4 h-4" />
+              Resumo do Mês
+            </div>
+          </button>
+          <button
+            onClick={() => setActiveTab("grafico")}
+            className={`pb-3 px-2 text-sm font-medium transition-colors relative ${
+              activeTab === "grafico" 
+                ? "text-primary border-b-2 border-primary" 
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Evolução do Saldo
+            </div>
+          </button>
         </div>
       </div>
+
+      {/* Conteúdo das Guias */}
+      {activeTab === "resumo" ? (
+        <div className="bg-card border border-border rounded-2xl p-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
+            <div>
+              <p className="text-xs text-muted-foreground">Renda do Mês</p>
+              <p className="text-lg font-bold text-green-600">
+                R$ {totalIncome.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Gastos do Mês</p>
+              <p className="text-lg font-bold text-red-600">
+                R$ {totalSpent.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Saldo do Mês</p>
+              <p className={`text-lg font-bold ${currentMonthBalance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {currentMonthBalance >= 0 ? '+' : ''}R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Saldo Total</p>
+              <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+                R$ {totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                (R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-card border border-border rounded-2xl p-4">
+          <Suspense fallback={<div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-muted border-t-primary rounded-full animate-spin" /></div>}>
+  <SaldoChart currentMonth={currentMonth} />
+</Suspense>
+        </div>
+      )}
     </div>
   );
 }
