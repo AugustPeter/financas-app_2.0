@@ -1,11 +1,11 @@
 // src/pages/Dashboard.jsx
 import { useState } from "react";
-import { lazy, Suspense } from 'react';
 import moment from "moment";
 import { useTransactions } from "@/hooks/useTransactions";
 import { useFixedExpenses } from "@/hooks/useFixedExpenses";
 import { useCardExpenses } from "@/hooks/useCardExpenses";
 import { useInvestments } from "@/hooks/useInvestments";
+import { useCumulativeBalance } from "@/hooks/useCumulativeBalance";
 import { TrendingUp, TrendingDown, Wallet, BarChart3, LayoutDashboard } from "lucide-react";
 import MonthSelector from "@/components/shared/MonthSelector";
 import StatCard from "@/components/shared/StatCard";
@@ -13,44 +13,34 @@ import SaldoChart from "@/components/dashboard/SaldoChart";
 
 export default function Dashboard() {
   const [currentMonth, setCurrentMonth] = useState(moment().format("YYYY-MM"));
-  const [activeTab, setActiveTab] = useState("resumo"); // "resumo" ou "grafico"
+  const [activeTab, setActiveTab] = useState("resumo");
   const prevMonth = moment(currentMonth, "YYYY-MM").subtract(1, "month").format("YYYY-MM");
 
-  // Dados do mês atual
+  // Dados do mês atual (apenas para exibição)
   const { transactions: currentTransactions, loading: transLoading } = useTransactions(currentMonth);
   const { totalActiveFixed, loading: fixedLoading } = useFixedExpenses();
   const { totalExpenses: totalCards, loading: cardLoading } = useCardExpenses(null, currentMonth);
   const { totalInvestedInMonth, loading: investLoading } = useInvestments(currentMonth);
   
-  // Dados do mês anterior
-  const { transactions: prevTransactions, loading: prevTransLoading } = useTransactions(prevMonth);
-  const { totalActiveFixed: prevTotalFixed, loading: prevFixedLoading } = useFixedExpenses();
-  const { totalExpenses: prevTotalCards, loading: prevCardLoading } = useCardExpenses(null, prevMonth);
-  const { totalInvestedInMonth: prevTotalInvested, loading: prevInvestLoading } = useInvestments(prevMonth);
+  // Usar useCumulativeBalance para os saldos
+  const { cumulativeBalance: currentTotalBalance, loading: currentBalanceLoading } = useCumulativeBalance(currentMonth);
+  const { cumulativeBalance: prevTotalBalance, loading: prevBalanceLoading } = useCumulativeBalance(prevMonth);
 
-  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || 
-                    prevTransLoading || prevFixedLoading || prevCardLoading || prevInvestLoading;
+  const isLoading = transLoading || fixedLoading || cardLoading || investLoading || currentBalanceLoading || prevBalanceLoading;
 
-  // Cálculos do mês atual
+  // Apenas para exibição (não usado nos cálculos de saldo)
   const totalIncome = currentTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
   const totalExpenses = currentTransactions?.filter(t => t.type === "expense")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
   const totalFixed = totalActiveFixed || 0;
   const totalCard = totalCards || 0;
   const totalInvested = totalInvestedInMonth || 0;
   const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested;
-  const currentMonthBalance = totalIncome - totalSpent;
 
-  // Cálculos do mês anterior
-  const prevIncome = prevTransactions?.filter(t => t.type === "income")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
-  const prevExpenses = prevTransactions?.filter(t => t.type === "expense")?.reduce((sum, t) => sum + Number(t.amount), 0) || 0;
-  const prevFixed = prevTotalFixed || 0;
-  const prevCard = prevTotalCards || 0;
-  const prevInvested = prevTotalInvested || 0;
-  const prevTotalSpent = prevExpenses + prevFixed + prevCard + prevInvested;
-  const prevMonthBalance = prevIncome - prevTotalSpent;
-
-  const totalBalance = currentMonthBalance + prevMonthBalance;
-  const SaldoChart = lazy(() => import('@/components/dashboard/SaldoChart'));
+  // Saldo do mês = Saldo acumulado atual - Saldo acumulado anterior
+  const currentMonthBalance = currentTotalBalance - prevTotalBalance;
+  
+  // 🔥 Saldo Total = Soma do saldo atual + saldo anterior (acumulado)
+  const totalBalance = currentTotalBalance;
 
   if (isLoading) {
     return (
@@ -102,11 +92,13 @@ export default function Dashboard() {
           value={totalBalance} 
           icon={TrendingUp} 
           variant={totalBalance >= 0 ? "balance" : "expense"}
-          subtitle={`Saldo do Mês + Saldo Anterior`}
+          subtitle={`R$ ${currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + R$ ${prevTotalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`}
         />
       </div>
 
-      {/* 🔥 Guias */}
+      
+
+      {/* Guias */}
       <div className="border-b border-border">
         <div className="flex gap-4">
           <button
@@ -166,16 +158,14 @@ export default function Dashboard() {
                 R$ {totalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                (R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + R$ {prevMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                (R$ {currentMonthBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} + R$ {prevTotalBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
               </p>
             </div>
           </div>
         </div>
       ) : (
         <div className="bg-card border border-border rounded-2xl p-4">
-          <Suspense fallback={<div className="flex justify-center py-12"><div className="w-8 h-8 border-3 border-muted border-t-primary rounded-full animate-spin" /></div>}>
-  <SaldoChart currentMonth={currentMonth} />
-</Suspense>
+          <SaldoChart currentMonth={currentMonth} />
         </div>
       )}
     </div>

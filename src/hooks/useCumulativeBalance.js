@@ -21,40 +21,71 @@ export function useCumulativeBalance(month) {
         setLoading(true)
         setError(null)
         
-        // Buscar até o FINAL do mês selecionado
         const endDate = moment(month, 'YYYY-MM').endOf('month').format('YYYY-MM-DD')
         
-        console.log(`Buscando saldo acumulado até: ${endDate}`)
-        
-        const { data, error: queryError } = await supabase
+        const { data: transactions, error: transError } = await supabase
           .from('transactions')
-          .select('type, amount, date, description')
+          .select('type, amount, date')
           .eq('user_id', user.id)
           .lte('date', endDate)
-          .order('date', { ascending: true })
 
-        if (queryError) {
-          console.error('Erro ao buscar saldo:', queryError)
-          setError(queryError.message)
-          setCumulativeBalance(0)
-        } else {
-          console.log(`Encontradas ${data?.length || 0} transações até ${endDate}`)
-          
-          // Calcular saldo acumulado
-          let balance = 0
-          data?.forEach(t => {
-            if (t.type === 'income') {
-              balance += Number(t.amount)
-            } else {
-              balance -= Number(t.amount)
-            }
-          })
-          
-          console.log(`Saldo acumulado calculado para ${month}: R$ ${balance}`)
-          setCumulativeBalance(balance)
-        }
+        if (transError) throw transError
+
+        const { data: fixedExpenses, error: fixedError } = await supabase
+          .from('fixed_expenses')
+          .select('amount')
+          .eq('user_id', user.id)
+          .eq('active', true)
+
+        if (fixedError) throw fixedError
+
+        const { data: cardExpenses, error: cardError } = await supabase
+          .from('card_expenses')
+          .select('amount, month')
+          .eq('user_id', user.id)
+          .lte('month', endDate)
+
+        if (cardError) throw cardError
+
+        const { data: investments, error: invError } = await supabase
+          .from('investments')
+          .select('amount, purchase_date')
+          .eq('user_id', user.id)
+          .lte('purchase_date', endDate)
+
+        if (invError) throw invError
+
+        const totalIncome = (transactions || [])
+          .filter(t => t.type === 'income')
+          .reduce((sum, t) => sum + Number(t.amount), 0)
+
+        const totalExpenses = (transactions || [])
+          .filter(t => t.type === 'expense')
+          .reduce((sum, t) => sum + Number(t.amount), 0)
+
+        const firstTransactionDate = (transactions || []).reduce((min, t) => 
+          t.date < min ? t.date : min, endDate
+        )
+        
+        const startMonth = moment(firstTransactionDate).startOf('month')
+        const endMonth = moment(endDate).endOf('month')
+        const numberOfMonths = endMonth.diff(startMonth, 'months') + 1
+        
+        const monthlyFixedTotal = (fixedExpenses || []).reduce((sum, f) => sum + Number(f.amount), 0)
+        const totalFixed = monthlyFixedTotal * numberOfMonths
+
+        const totalCard = (cardExpenses || [])
+          .reduce((sum, c) => sum + Number(c.amount), 0)
+
+        const totalInvested = (investments || [])
+          .reduce((sum, i) => sum + Number(i.amount), 0)
+
+        const totalSpent = totalExpenses + totalFixed + totalCard + totalInvested
+        const balance = totalIncome - totalSpent
+        
+        setCumulativeBalance(balance)
       } catch (err) {
-        console.error('Erro inesperado:', err)
+        console.error('Erro ao buscar saldo acumulado:', err)
         setError(err.message)
         setCumulativeBalance(0)
       } finally {
